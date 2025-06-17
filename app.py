@@ -94,6 +94,13 @@ def sync_now():
         app.logger.exception("Manual sync failed")
         return jsonify({'ok': False, 'error': str(e)}), 500
 # ▲ ここまで追加 ──────────────────────────────────
+# --- いま DB に入っているメール件数を返すだけの簡易 API ---
+@app.route('/count')
+def count_mails():
+    sess = Session()
+    n = sess.query(EmailModel).count()
+    sess.close()
+    return {'count': n}
 
 # ── 画像配信など既存エンドポイントは元のまま ────────────
 @app.route('/uploads/<path:filename>')
