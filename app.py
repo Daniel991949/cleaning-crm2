@@ -107,5 +107,33 @@ def count_mails():
 def uploaded_file(filename):
     return send_from_directory(UPLOAD, filename)
 
+# --- メール詳細を JSON で返す ----------------------------
+@app.route('/email/<int:uv>/<int:uid>')
+def email_detail(uv, uid):
+    sess = Session()
+    m = (sess.query(EmailModel)
+              .filter_by(uidvalidity=uv, uid=uid)
+              .first())
+    if not m:
+        sess.close()
+        abort(404)
+    data = {
+        'uidvalidity': m.uidvalidity,
+        'uid'        : m.uid,
+        'subject'    : m.subject,
+        'customer_name': m.customer_name,
+        'from_addr'  : m.from_addr,
+        'date'       : m.date.isoformat() if hasattr(m, "date") else '',
+        'body'       : m.body,
+        'status'     : m.status,
+        'notes'      : {n.page: n.content for n in getattr(m, "notes", [])},
+        'photos'     : [url_for('uploaded_file', filename=p.filename)
+                        for p in getattr(m, "photos", [])]
+    }
+    sess.close()
+    return jsonify(data)
+
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
