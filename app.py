@@ -107,7 +107,8 @@ def count_mails():
 def uploaded_file(filename):
     return send_from_directory(UPLOAD, filename)
 
-# --- メール詳細を JSON で返す ----------------------------
+from sqlalchemy.inspection import inspect
+
 @app.route('/email/<int:uv>/<int:uid>')
 def email_detail(uv, uid):
     sess = Session()
@@ -117,22 +118,29 @@ def email_detail(uv, uid):
     if not m:
         sess.close()
         abort(404)
+
+    def get(attr, default=''):
+        return getattr(m, attr, default)
+
+    # introspect で存在するカラム名一覧を取得
+    cols = {c.key for c in inspect(m).mapper.column_attrs}
+
     data = {
         'uidvalidity': m.uidvalidity,
         'uid'        : m.uid,
-        'subject'    : m.subject,
-        'customer_name': m.customer_name,
-        'from_addr'  : m.from_addr,
-        'date'       : m.date.isoformat() if hasattr(m, "date") else '',
-        'body'       : m.body,
-        'status'     : m.status,
-        'notes'      : {n.page: n.content for n in getattr(m, "notes", [])},
-        'photos'     : [url_for('uploaded_file', filename=p.filename)
-                        for p in getattr(m, "photos", [])]
+        'subject'    : get('subject'),
+        'customer_name': get('customer_name') or get('customer') or '',
+        'from_addr'  : get('from_addr') or get('sender', ''),
+        'date'       : get('date').isoformat() if 'date' in cols and m.date else '',
+        'body'       : get('body'),
+        'status'     : get('status'),
+        # notes / photos は存在すれば展開、無ければ空
+        'notes' : {n.page: n.content for n in getattr(m, 'notes', [])},
+        'photos': [url_for('uploaded_file', filename=p.filename)
+                   for p in getattr(m, 'photos', [])]
     }
     sess.close()
     return jsonify(data)
-
 
 
 if __name__ == '__main__':
