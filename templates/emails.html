@@ -48,6 +48,12 @@
 
 <!-- ───── 左ペイン（一覧） ───────────────────────── -->
 <div id="sidebar">
+  <!-- ★ 追加：今すぐ取り込むボタン -->
+  <div style="padding:8px;border-bottom:1px solid #ccc;background:#fafafa">
+    <button id="syncBtn">今すぐ取り込む</button>
+    <span id="syncMsg" style="font-size:.8rem;color:#555"></span>
+  </div>
+
   <table>
     <thead>
       <tr><th>UID</th><th>件名</th><th>顧客名</th></tr>
@@ -104,14 +110,33 @@ function fmtBody(txt){
       /(?:&lt;|\[)?\s*(https?:\/\/[^\s"'<>]+\.(?:png|jpe?g|gif))\s*(?:\]|&gt;)?/gi,
       (_,u)=>`<br><span class="inline-wrap">
                 <img class="inline-thumb" src="/proxy?url=${encodeURIComponent(u)}">
-                <a class="dl-link" href="/proxy?url=${encodeURIComponent(u)}" download>💾</a>
+                <a class="dl-link" href="/proxy?url=${encodeURIComponent(u)}" download>DL</a>
               </span><br>`
   );
   s = s.replace(/(https?:\/\/[^\s"'<>]+)/gi,'<a href="$1" target="_blank">$1</a>');
   return s.replace(/\n/g,'<br>');
 }
 
-/* メモブロック生成 */
+/* 今すぐ取り込むボタン ───────────────────────── */
+const btnSync = document.getElementById('syncBtn');
+const msgSync = document.getElementById('syncMsg');
+btnSync.addEventListener('click', async ()=>{
+  btnSync.disabled = true; msgSync.textContent = '同期中…';
+  try{
+    const r = await fetch('/sync_now',{method:'POST'});
+    const j = await r.json();
+    if(r.ok && j.ok){
+      msgSync.textContent = '完了。ページを再読み込みしてください';
+    }else{
+      msgSync.textContent = '失敗: '+(j.error || r.status);
+    }
+  }catch(e){
+    msgSync.textContent = '通信エラー';
+  }
+  btnSync.disabled = false;
+});
+
+/* メモ生成 */
 const memo = (i,v)=> i===1
  ? `<div class="note-block"><h4>フリーメモ P${i}</h4>
       <textarea data-p="${i}">${esc(v||'')}</textarea><button data-p="${i}">保存</button>
@@ -177,10 +202,10 @@ async function show(uv,uid,tr){
     e.preventDefault();
     fetch(`/emails/${uv}/${uid}/upload_photo`,
           {method:'POST',body:new FormData(e.target)})
-      .then(()=>show(uv,uid,tr));   // 再読み込みして反映
+      .then(()=>show(uv,uid,tr));   // リロードして反映
   };
 
-  /* サムネ → モーダル */
+  /* サムネクリック → モーダル */
   detail.querySelectorAll('.photos img').forEach(img=>{
     img.onclick = ev =>{
       ev.preventDefault();
@@ -197,7 +222,7 @@ list.onclick = e =>{
   if(tr) show(tr.dataset.uv,tr.dataset.uid,tr);
 };
 
-/* モーダル閉じる */
+/* モーダル閉じる（背景クリック） */
 modal.onclick = e =>{ if(e.target===modal) modal.style.display='none'; };
 });
 </script>
