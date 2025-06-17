@@ -1,0 +1,78 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+#container {
+    display: flex;
+    width: 80%;
+}
+
+#left-frame {
+    flex: 1; /* 左のフレームの幅を狭くする */
+    padding: 20px;
+    border: 1px solid #ddd;
+    margin: 10px;
+}
+
+#right-frame {
+    flex: 3; /* 右のフレームの幅を広くする */
+    padding: 20px;
+    border: 1px solid #ddd;
+    margin: 10px;
+}
+
+
+#names-list {
+    margin-top: 20px;
+    height: 300px; /* 調整可能 */
+    overflow-y: scroll;
+    border: 1px solid #ccc;
+}
+
+#preview-text {
+    height: 300px; /* 調整可能 */
+    overflow-y: scroll;
+    border: 1px solid #ccc;
+    margin-bottom: 20px;
+}
+
+#status-buttons button {
+    margin-right: 10px;
+    padding: 5px 10px;
+}
+
+.selected {
+    border: 2px solid red;
+    padding: 2px;
+}
+.red-background { background-color: red; }
+.yellow-background { background-color: yellow; }
+.lightblue-background { background-color: lightblue; }
+.green-background { background-color: green; }
+
+/* style.css */
+.modal {
+    display: none; /* モーダルを非表示にする */
+    /* その他のスタイル設定 */
+}
+
+.modal-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group {
+    margin-bottom: 10px;
+}
+
+.form-group label {
+    margin-bottom: 5px;
+    display: block;
+}
+

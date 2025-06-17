@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>クリーニング見積もり管理</title>
+<style>
+  /* ——— レイアウト ——— */
+  body        {display:flex;height:100vh;margin:0;font-family:Arial,Helvetica,sans-serif}
+  #sidebar    {width:360px;min-width:300px;border-right:1px solid #ccc;overflow:auto}
+  #detail     {flex:1;overflow:auto;padding:16px}
+
+  /* ——— 一覧テーブル ——— */
+  table       {border-collapse:collapse;width:100%}
+  th,td       {border:1px solid #ddd;padding:6px;font-size:.9rem}
+  th          {background:#f0f0f0;position:sticky;top:0}
+  tr:hover    {outline:2px solid #4285f4;cursor:pointer}
+  tr.selected {outline:2px solid #4285f4}
+
+  /* ——— ステータス別の薄色背景 ——— */
+  .st-new  {background:#ffecec;}   /* 未対応        : 薄い赤   */
+  .st-sent {background:#e5ffe5;}   /* 見積送信済み  : 薄い緑   */
+  .st-req  {background:#e6f2ff;}   /* 依頼あり      : 薄い青   */
+  .st-in   {background:#fff7cc;}   /* 荷物受け取り  : 薄い黄   */
+  .st-out  {background:#ffffff;}   /* 荷物返送済み  : 白       */
+
+  .ellipsis{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+
+  /* ——— メモ & 写真 ——— */
+  textarea     {width:100%;min-height:110px;font-family:monospace;font-size:.9rem;padding:6px}
+  .note-block  {margin-bottom:10px}
+  .photos img  {max-width:140px;max-height:140px;margin:4px;border:1px solid #ccc}
+
+  /* 本文に埋め込む画像サムネ + DL ボタン */
+  .inline-wrap {position:relative;display:inline-block;margin:8px 0}
+  .inline-thumb{max-width:280px;max-height:280px;height:auto;display:block}
+  .dl-link     {position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.6);
+                color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;text-decoration:none;display:none}
+  .inline-wrap:hover .dl-link{display:block}
+
+  /* ——— モーダル ——— */
+  #img-modal   {display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);
+                justify-content:center;align-items:center;z-index:999}
+  #img-modal img{max-width:90%;max-height:90%}
+  #img-dl      {position:absolute;top:18px;right:30px;font-size:1.3rem;color:#fff;text-decoration:none}
+</style>
+</head>
+<body>
+
+<!-- ───── 左ペイン（一覧） ───────────────────────── -->
+<div id="sidebar">
+  <table>
+    <thead>
+      <tr><th>UID</th><th>件名</th><th>顧客名</th></tr>
+    </thead>
+    <tbody id="list">
+      {% for m in emails %}
+      <tr data-uv="{{m.uidvalidity}}" data-uid="{{m.uid}}"
+          class="st-{{  'new'  if m.status == '未対応'
+                    else 'sent' if m.status == '見積メール送信済'
+                    else 'req'  if m.status == '依頼あり'
+                    else 'in'   if m.status == '荷物受け取り'
+                    else 'out'  }}">
+        <td>{{m.uid}}</td>
+        <td class="ellipsis" title="{{m.subject}}">{{m.subject}}</td>
+        <td class="ellipsis" title="{{m.customer_name}}">{{m.customer_name}}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- ───── 右ペイン（詳細） ───────────────────────── -->
+<div id="detail"><p>左のメールをクリックしてください。</p></div>
+
+<!-- ───── 画像モーダル ─────────────────────────── -->
+<div id="img-modal">
+  <a id="img-dl" href="#" download>↓保存</a>
+  <img id="img-view">
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+/* 要素参照 */
+const list   = document.getElementById('list');
+const detail = document.getElementById('detail');
+const modal  = document.getElementById('img-modal');
+let   curRow = null;
+
+/* HTML エスケープ */
+const esc = s => s.replace(/[&<>"']/g,
+               c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ステータス → 行クラス */
+const stCls = s => s==='未対応'            ? 'st-new'
+                  : s==='見積メール送信済' ? 'st-sent'
+                  : s==='依頼あり'        ? 'st-req'
+                  : s==='荷物受け取り'    ? 'st-in'
+                  :                         'st-out';
+
+/* 本文整形（画像サムネ ＋ DL） */
+function fmtBody(txt){
+  let s = esc(txt);
+  s = s.replace(
+      /(?:&lt;|\[)?\s*(https?:\/\/[^\s"'<>]+\.(?:png|jpe?g|gif))\s*(?:\]|&gt;)?/gi,
+      (_,u)=>`<br><span class="inline-wrap">
+                <img class="inline-thumb" src="/proxy?url=${encodeURIComponent(u)}">
+                <a class="dl-link" href="/proxy?url=${encodeURIComponent(u)}" download>💾</a>
+              </span><br>`
+  );
+  s = s.replace(/(https?:\/\/[^\s"'<>]+)/gi,'<a href="$1" target="_blank">$1</a>');
+  return s.replace(/\n/g,'<br>');
+}
+
+/* メモブロック生成 */
+const memo = (i,v)=> i===1
+ ? `<div class="note-block"><h4>フリーメモ P${i}</h4>
+      <textarea data-p="${i}">${esc(v||'')}</textarea><button data-p="${i}">保存</button>
+    </div>`
+ : `<details class="note-block"><summary><b>フリーメモ P${i}</b></summary>
+      <textarea data-p="${i}">${esc(v||'')}</textarea><button data-p="${i}">保存</button>
+    </details>`;
+
+/* 詳細表示 */
+async function show(uv,uid,tr){
+  if(curRow) curRow.classList.remove('selected');
+  tr.classList.add('selected'); curRow = tr;
+
+  const d = await (await fetch(`/email/${uv}/${uid}`)).json();
+
+  detail.innerHTML = `
+    <h2>${esc(d.subject)}</h2>
+    <p><b>UID:</b> ${d.uid} / <b>UIDVALIDITY:</b> ${d.uidvalidity}</p>
+    <p><b>顧客名:</b> ${esc(d.customer_name)}</p>
+    <p><b>From:</b> ${esc(d.from_addr)}</p>
+    <p><b>Date:</b> ${d.date}</p>
+
+    <h3>本文</h3><div>${fmtBody(d.body)}</div>
+
+    <h3>ステータス</h3>
+    <form id="stf">
+      <select name="status">
+        ${['未対応','見積メール送信済','依頼あり','荷物受け取り','荷物返送済み']
+          .map(s=>`<option${s===d.status?' selected':''}>${s}</option>`).join('')}
+      </select>
+      <button>更新</button>
+    </form>
+
+    <h3>フリーメモ</h3>${[1,2,3,4].map(i=>memo(i,d.notes?.[i])).join('')}
+
+    <h3>写真</h3>
+    <div class="photos">${d.photos.map(u=>`<a href="${u}" target="_blank"><img src="${u}"></a>`).join('')}</div>
+    <form id="pf" enctype="multipart/form-data">
+      <input type="file" name="photo" accept="image/*">
+      <button>Upload</button>
+    </form>`;
+
+  /* ステータス更新 */
+  document.getElementById('stf').onsubmit = e =>{
+    e.preventDefault();
+    fetch(`/emails/${uv}/${uid}/update_status`,
+          {method:'POST',body:new FormData(e.target)})
+      .then(()=>{ tr.className = stCls(e.target.status.value); });
+  };
+
+  /* メモ保存 */
+  detail.querySelectorAll('.note-block button').forEach(b=>{
+    b.onclick = () =>{
+      const p = b.dataset.p;
+      const v = detail.querySelector(`textarea[data-p="${p}"]`).value;
+      const fd = new FormData(); fd.append('page',p); fd.append('content',v);
+      fetch(`/emails/${uv}/${uid}/save_note`,{method:'POST',body:fd});
+    };
+  });
+
+  /* 写真アップロード */
+  document.getElementById('pf').onsubmit = e =>{
+    e.preventDefault();
+    fetch(`/emails/${uv}/${uid}/upload_photo`,
+          {method:'POST',body:new FormData(e.target)})
+      .then(()=>show(uv,uid,tr));   // 再読み込みして反映
+  };
+
+  /* サムネ → モーダル */
+  detail.querySelectorAll('.photos img').forEach(img=>{
+    img.onclick = ev =>{
+      ev.preventDefault();
+      document.getElementById('img-view').src = img.parentNode.href;
+      document.getElementById('img-dl').href  = img.parentNode.href;
+      modal.style.display='flex';
+    };
+  });
+}
+
+/* 一覧クリック */
+list.onclick = e =>{
+  const tr=e.target.closest('tr');
+  if(tr) show(tr.dataset.uv,tr.dataset.uid,tr);
+};
+
+/* モーダル閉じる */
+modal.onclick = e =>{ if(e.target===modal) modal.style.display='none'; };
+});
+</script>
+</body>
+</html>

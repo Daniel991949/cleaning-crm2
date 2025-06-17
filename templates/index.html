@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>メール一覧</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <h1>取り込んだメール一覧</h1>
+  <table border="1" cellpadding="8">
+    <thead>
+      <tr>
+        <th>到着日時</th>
+        <th>From</th>
+        <th>件名</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for mail in emails %}
+      <tr>
+        <td>{{ mail.date.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td>{{ mail.from_addr }}</td>
+        <td>{{ mail.subject }}</td>
+        <td>
+          <form action="/emails/{{ mail.uidvalidity }}/{{ mail.uid }}/status" method="post" style="display:inline;">
+            <select name="status">
+              <option value="new">新着</option>
+              <option value="processing">処理中</option>
+              <option value="completed">完了</option>
+            </select>
+            <button type="submit">更新</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>
