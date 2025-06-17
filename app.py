@@ -142,6 +142,30 @@ def email_detail(uv, uid):
     sess.close()
     return jsonify(data)
 
+# --- リモート画像を同一オリジンから配信する簡易プロキシ -----------------
+import requests
+from flask import Response  # 既に import していなければ追加
+
+@app.route('/proxy')
+def proxy():
+    url = request.args.get('url', '')
+    # 最低限のバリデーション
+    if not url.startswith(('http://', 'https://')):
+        abort(400, 'invalid url')
+
+    try:
+        r = requests.get(url, timeout=10)
+    except requests.exceptions.RequestException:
+        abort(502, 'fetch error')
+
+    # Content-Type をそのまま転送
+    return Response(
+        r.content,
+        status=r.status_code,
+        content_type=r.headers.get('Content-Type', 'application/octet-stream'),
+        headers={'Cache-Control': 'public, max-age=86400'}   # 1 日キャッシュ
+    )
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
